@@ -23,7 +23,7 @@ weight=$(jq -r '.weight' data.json)
 formatted_weight=$(echo "scale=0; $weight/10" | bc)
 
 # Extract the type(s)
-types=$(jq -r '.types[].type.name' data.json)
+type=$(jq -r '.types[].type.name' data.json)
 
 # Format type(s) - capitalize the first letter of each type
 #formatted_types=$(echo "$types" | awk '{ print toupper(substr($0, 1, 1)) substr($0, 2) }')
@@ -32,4 +32,4 @@ types=$(jq -r '.types[].type.name' data.json)
 #type_str=$(echo "$formatted_types" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ and /g')
 
 # Print the formatted output
-echo "$name is of type $types, weighs ${formatted_weight}kg, and is ${formatted_height}m tall."
+echo "$name is of type $type, weighs ${formatted_weight}kg, and is ${formatted_height}m tall."

@@ -1,0 +1,109 @@
+#!/bin/bash
+
+# Script to retrieve data for multiple Pokémon in parallel
+# Uses background processes for concurrent requests
+
+# Pokémon list
+POKEMON_LIST=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
+
+# API base URL
+API_BASE_URL="https://pokeapi.co/api/v2/pokemon"
+
+# Error log
+ERROR_LOG="parallel_errors.txt"
+
+# Maximum number of retry attempts
+MAX_RETRIES=3
+
+# Directory for output files
+OUTPUT_DIR="pokemon_parallel"
+mkdir -p "$OUTPUT_DIR"
+
+# Directory for temporary process status files
+TMP_DIR="${OUTPUT_DIR}/.tmp"
+mkdir -p "$TMP_DIR"
+
+# Function to fetch Pokémon data with retry logic
+fetch_pokemon_data() {
+    local pokemon=$1
+    local pokemon_lower=$(echo "$pokemon" | tr '[:upper:]' '[:lower:]')
+    local output_file="${OUTPUT_DIR}/${pokemon_lower}.json"
+    local status_file="${TMP_DIR}/${pokemon_lower}.status"
+    local pid_file="${TMP_DIR}/${pokemon_lower}.pid"
+    local attempt=1
+    
+    # Save PID to file for monitoring
+    echo $$ > "$pid_file"
+    
+    echo "[$(date '+%H:%M:%S')] Starting process for $pokemon (PID: $$)"
+    
+    while [ $attempt -le $MAX_RETRIES ]; do
+        echo "[$(date '+%H:%M:%S')] $pokemon: Attempt $attempt of $MAX_RETRIES"
+        
+        # Make the API request
+        curl -s -f -o "$output_file" "${API_BASE_URL}/${pokemon_lower}" 2>/dev/null
+        
+        # Check if curl was successful and validate JSON
+        if [ $? -eq 0 ] && jq empty "$output_file" 2>/dev/null; then
+            echo "success" > "$status_file"
+            echo "[$(date '+%H:%M:%S')] $pokemon: Success on attempt $attempt"
+            exit 0
+        else
+            echo "[$(date '+%H:%M:%S')] $pokemon: Attempt $attempt failed"
+            # Remove invalid file if it exists
+            rm -f "$output_file"
+            # Increment attempt count
+            attempt=$((attempt + 1))
+            # Sleep briefly before retrying
+            [ $attempt -le $MAX_RETRIES ] && sleep 2
+        fi
+    done
+    
+    # All attempts failed
+    echo "failure" > "$status_file"
+    echo "[$(date '+%H:%M:%S')] $pokemon: All $MAX_RETRIES attempts failed" 
+    echo "$(date): Error fetching data for $pokemon after $MAX_RETRIES attempts" >> "$ERROR_LOG"
+    exit 1
+}
+
+echo "Starting parallel retrieval of Pokémon data..."
+echo "Spawning ${#POKEMON_LIST[@]} parallel processes..."
+
+# Clean up any previous temporary files
+rm -f "${TMP_DIR}"/*.status "${TMP_DIR}"/*.pid 2>/dev/null
+
+# Start background processes for each Pokémon
+for pokemon in "${POKEMON_LIST[@]}"; do
+    fetch_pokemon_data "$pokemon" &
+    echo "Started process for $pokemon with PID: $!"
+done
+
+echo "All processes started. Waiting for completion..."
+
+# Wait for all background processes to finish
+wait
+
+echo "All background processes completed!"
+
+# Count successes and failures
+SUCCESS_COUNT=$(grep -l "success" "${TMP_DIR}"/*.status 2>/dev/null | wc -l)
+FAIL_COUNT=$(grep -l "failure" "${TMP_DIR}"/*.status 2>/dev/null | wc -l)
+TOTAL_COUNT=${#POKEMON_LIST[@]}
+
+# Print summary
+echo ""
+echo "==== Parallel Processing Summary ===="
+echo "Total Pokémon processed: $TOTAL_COUNT"
+echo "Successful: $SUCCESS_COUNT"
+echo "Failed: $FAIL_COUNT"
+
+# Clean up temporary files
+rm -rf "${TMP_DIR}"
+
+if [ $FAIL_COUNT -eq 0 ]; then
+    echo "All Pokémon data retrieved successfully!"
+    exit 0
+else
+    echo "Some requests failed. See $ERROR_LOG for details."
+    exit 1
+fi

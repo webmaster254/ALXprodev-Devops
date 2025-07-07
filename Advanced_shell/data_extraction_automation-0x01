@@ -10,26 +10,26 @@ if [ ! -f "data.json" ]; then
 fi
 
 # Extract the name, height, weight, and types from data.json using jq
-NAME=$(jq -r '.name' data.json)
+name=$(jq -r '.name' data.json)
 
 # Height in decimeters - convert to meters
-HEIGHT_DM=$(jq -r '.height' data.json)
+height=$(jq -r '.height' data.json)
 # Convert to meters with one decimal place
-HEIGHT_M=$(echo "scale=1; $HEIGHT_DM/10" | bc)
+formatted_height=$(echo "scale=1; $height/10" | bc)
 
 # Weight in hectograms - convert to kilograms
-WEIGHT_HG=$(jq -r '.weight' data.json)
+weight=$(jq -r '.weight' data.json)
 # Convert to kg
-WEIGHT_KG=$(echo "scale=0; $WEIGHT_HG/10" | bc)
+formatted_weight=$(echo "scale=0; $weight/10" | bc)
 
 # Extract the type(s)
-TYPES=$(jq -r '.types[].type.name' data.json)
+types=$(jq -r '.types[].type.name' data.json)
 
 # Format type(s) - capitalize the first letter of each type
-FORMATTED_TYPES=$(echo "$TYPES" | awk '{ print toupper(substr($0, 1, 1)) substr($0, 2) }')
+#formatted_types=$(echo "$types" | awk '{ print toupper(substr($0, 1, 1)) substr($0, 2) }')
 
 # If multiple types, join them with "and"
-TYPE_STR=$(echo "$FORMATTED_TYPES" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ and /g')
+#type_str=$(echo "$formatted_types" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ and /g')
 
 # Print the formatted output
-echo "$NAME is of type $TYPE_STR, weighs ${WEIGHT_KG}kg, and is ${HEIGHT_M}m tall."
+echo "$name is of type $types, weighs ${formatted_weight}kg, and is ${formatted_height}m tall."

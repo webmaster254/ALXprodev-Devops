@@ -2,6 +2,7 @@
 
 # Script to retrieve data for multiple Pokémon and store in separate files
 # Handles rate limiting with a delay between requests
+# Includes robust error handling and retry logic
 
 # Pokémon list
 POKEMON_LIST=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
@@ -14,6 +15,55 @@ ERROR_LOG="batch_errors.txt"
 
 # Delay between requests (in seconds) to avoid rate limiting
 REQUEST_DELAY=1
+
+# Maximum number of retry attempts
+MAX_RETRIES=3
+
+# Delay between retry attempts (in seconds)
+RETRY_DELAY=2
+
+# Function to make API request with retry logic
+make_api_request() {
+    local pokemon=$1
+    local output_file=$2
+    local url=$3
+    local attempt=1
+    local success=false
+    
+    while [ $attempt -le $MAX_RETRIES ] && [ "$success" = false ]; do
+        echo "Attempt $attempt of $MAX_RETRIES for $pokemon..."
+        
+        # Make the API request
+        curl -s -f -o "$output_file" "$url" 2> /dev/null
+        
+        # Check if the curl command was successful
+        if [ $? -eq 0 ]; then
+            # Verify the content is valid JSON and not an error message
+            if jq empty "$output_file" 2>/dev/null; then
+                echo "Success! Data for $pokemon has been saved to $output_file"
+                success=true
+                return 0
+            else
+                echo "Retrieved file is not valid JSON. Retrying..."
+                rm -f "$output_file"  # Remove invalid file
+            fi
+        else
+            echo "Attempt $attempt failed for $pokemon. Retrying in $RETRY_DELAY seconds..."
+            if [ $attempt -lt $MAX_RETRIES ]; then
+                sleep $RETRY_DELAY
+            fi
+        fi
+        
+        attempt=$((attempt + 1))
+    done
+    
+    # If all attempts failed
+    if [ "$success" = false ]; then
+        echo "$(date): Error fetching data for $pokemon from $url after $MAX_RETRIES attempts" >> "$ERROR_LOG"
+        echo "Failed to fetch data for $pokemon after $MAX_RETRIES attempts. Check $ERROR_LOG for details."
+        return 1
+    fi
+}
 
 echo "Starting batch retrieval of Pokémon data..."
 
@@ -33,19 +83,15 @@ for pokemon in "${POKEMON_LIST[@]}"; do
     # Output file
     output_file="${OUTPUT_DIR}/${pokemon_lower}.json"
     
-    echo "Fetching data for ${pokemon}..."
+    echo "Processing $pokemon..."
     
-    # Make the API request
-    curl -s -f -o "$output_file" "${API_BASE_URL}/${pokemon_lower}" 2> /dev/null
+    # Make the API request with retry logic
+    make_api_request "$pokemon" "$output_file" "${API_BASE_URL}/${pokemon_lower}"
     
-    # Check if the curl command was successful
+    # Check if the API request was successful
     if [ $? -eq 0 ]; then
-        echo "Success! Data for ${pokemon} has been saved to ${output_file}"
         SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
     else
-        # Log the error
-        echo "$(date): Error fetching data for ${pokemon} from ${API_BASE_URL}/${pokemon_lower}" >> "$ERROR_LOG"
-        echo "Failed to fetch data for ${pokemon}. Check ${ERROR_LOG} for details."
         FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
     

@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# Script to retrieve data for multiple Pokémon and store in separate files
+# Handles rate limiting with a delay between requests
+
+# Pokémon list
+POKEMON_LIST=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
+
+# API base URL
+API_BASE_URL="https://pokeapi.co/api/v2/pokemon"
+
+# Error log
+ERROR_LOG="batch_errors.txt"
+
+# Delay between requests (in seconds) to avoid rate limiting
+REQUEST_DELAY=1
+
+echo "Starting batch retrieval of Pokémon data..."
+
+# Create directory for the files if it doesn't exist
+OUTPUT_DIR="pokemon_data"
+mkdir -p "$OUTPUT_DIR"
+
+# Counter for successful and failed requests
+SUCCESS_COUNT=0
+FAIL_COUNT=0
+
+# Process each Pokémon in the list
+for pokemon in "${POKEMON_LIST[@]}"; do
+    # Convert to lowercase
+    pokemon_lower=$(echo "$pokemon" | tr '[:upper:]' '[:lower:]')
+    
+    # Output file
+    output_file="${OUTPUT_DIR}/${pokemon_lower}.json"
+    
+    echo "Fetching data for ${pokemon}..."
+    
+    # Make the API request
+    curl -s -f -o "$output_file" "${API_BASE_URL}/${pokemon_lower}" 2> /dev/null
+    
+    # Check if the curl command was successful
+    if [ $? -eq 0 ]; then
+        echo "Success! Data for ${pokemon} has been saved to ${output_file}"
+        SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+    else
+        # Log the error
+        echo "$(date): Error fetching data for ${pokemon} from ${API_BASE_URL}/${pokemon_lower}" >> "$ERROR_LOG"
+        echo "Failed to fetch data for ${pokemon}. Check ${ERROR_LOG} for details."
+        FAIL_COUNT=$((FAIL_COUNT + 1))
+    fi
+    
+    # Add delay between requests to avoid rate limiting
+    if [ $((SUCCESS_COUNT + FAIL_COUNT)) -lt ${#POKEMON_LIST[@]} ]; then
+        echo "Waiting ${REQUEST_DELAY} seconds before next request..."
+        sleep $REQUEST_DELAY
+    fi
+done
+
+# Summary
+echo ""
+echo "==== Batch Processing Summary ===="
+echo "Total Pokémon processed: $((SUCCESS_COUNT + FAIL_COUNT))"
+echo "Successful: $SUCCESS_COUNT"
+echo "Failed: $FAIL_COUNT"
+
+if [ $FAIL_COUNT -eq 0 ]; then
+    echo "All Pokémon data retrieved successfully!"
+    exit 0
+else
+    echo "Some requests failed. See $ERROR_LOG for details."
+    exit 1
+fi

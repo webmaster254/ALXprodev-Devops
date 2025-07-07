@@ -1,0 +1,77 @@
+#!/bin/bash
+
+# Script to summarize data for multiple Pokémon
+# Reads JSON files, generates CSV report, and calculates averages
+
+# Directory where Pokémon JSON files are stored
+DATA_DIR="pokemon_data"
+
+# Output CSV file
+OUTPUT_CSV="pokemon_summary.csv"
+
+# Check if data directory exists
+if [ ! -d "$DATA_DIR" ]; then
+    echo "Error: $DATA_DIR directory not found"
+    exit 1
+fi
+
+# Check for JSON files
+JSON_FILES=$(find "$DATA_DIR" -name "*.json")
+if [ -z "$JSON_FILES" ]; then
+    echo "Error: No JSON files found in $DATA_DIR"
+    exit 1
+fi
+
+echo "Generating Pokémon summary report..."
+
+# Create CSV header
+echo "name,height,weight" > "$OUTPUT_CSV"
+
+# Process each JSON file
+for json_file in $JSON_FILES; do
+    # Extract name, height (in decimeters), and weight (in hectograms)
+    name=$(jq -r '.name' "$json_file")
+    height=$(jq -r '.height' "$json_file")  # Height is in decimeters
+    weight=$(jq -r '.weight' "$json_file")  # Weight is in hectograms
+    
+    # Add data to CSV
+    echo "$name,$height,$weight" >> "$OUTPUT_CSV"
+    
+    echo "Processed: $name"
+done
+
+echo "CSV report generated: $OUTPUT_CSV"
+
+# Use awk to calculate averages and append to the report
+awk_script='
+BEGIN { FS = ","; heights = 0; weights = 0; count = 0; print "\nPokémon Statistics Report:" }
+$1 != "name" { 
+    heights += $2; 
+    weights += $3; 
+    count++; 
+}
+END { 
+    if (count > 0) {
+        avg_height = heights / count;
+        avg_weight = weights / count;
+        # Convert height from decimeters to meters
+        avg_height_m = avg_height / 10;
+        # Convert weight from hectograms to kilograms
+        avg_weight_kg = avg_weight / 10;
+        print "\nTotal Pokémon analyzed: " count;
+        print "Average height: " avg_height_m " meters";
+        print "Average weight: " avg_weight_kg " kilograms";
+    } else {
+        print "No data to calculate averages.";
+    }
+}'
+
+# Run awk script and save output
+echo -e "\nCalculating statistics..."
+awk "$awk_script" "$OUTPUT_CSV" > stats_report.txt
+
+# Display the stats report
+cat stats_report.txt
+
+echo -e "\nComplete summary report saved to: stats_report.txt"
+echo "Raw data saved to: $OUTPUT_CSV"

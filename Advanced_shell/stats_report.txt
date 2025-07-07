@@ -1,0 +1,6 @@
+
+Pokémon Statistics Report:
+
+Total Pokémon analyzed: 5
+Average height: 1.08 meters
+Average weight: 29.48 kilograms

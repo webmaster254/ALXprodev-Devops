@@ -1,0 +1,35 @@
+#!/bin/bash
+
+# Script to extract Pokémon data from data.json using jq, awk, and sed
+
+
+# Check if data.json exists
+if [ ! -f "data.json" ]; then
+    echo "Error: data.json not found"
+    exit 1
+fi
+
+# Extract the name, height, weight, and types from data.json using jq
+NAME=$(jq -r '.name' data.json)
+
+# Height in decimeters - convert to meters
+HEIGHT_DM=$(jq -r '.height' data.json)
+# Convert to meters with one decimal place
+HEIGHT_M=$(echo "scale=1; $HEIGHT_DM/10" | bc)
+
+# Weight in hectograms - convert to kilograms
+WEIGHT_HG=$(jq -r '.weight' data.json)
+# Convert to kg
+WEIGHT_KG=$(echo "scale=0; $WEIGHT_HG/10" | bc)
+
+# Extract the type(s)
+TYPES=$(jq -r '.types[].type.name' data.json)
+
+# Format type(s) - capitalize the first letter of each type
+FORMATTED_TYPES=$(echo "$TYPES" | awk '{ print toupper(substr($0, 1, 1)) substr($0, 2) }')
+
+# If multiple types, join them with "and"
+TYPE_STR=$(echo "$FORMATTED_TYPES" | sed -e ':a' -e 'N' -e '$!ba' -e 's/\n/ and /g')
+
+# Print the formatted output
+echo "$NAME is of type $TYPE_STR, weighs ${WEIGHT_KG}kg, and is ${HEIGHT_M}m tall."

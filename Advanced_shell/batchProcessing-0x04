@@ -2,6 +2,23 @@
 
 # Script to retrieve data for multiple Pokémon in parallel
 # Uses background processes for concurrent requests
+# Includes jobs monitoring and process management with kill capability
+
+# Function to clean up background processes on exit
+cleanup() {
+    echo "\nCleaning up processes..."
+    # Get all running job PIDs and kill them
+    local pids=$(jobs -p)
+    if [ -n "$pids" ]; then
+        echo "Killing running processes: $pids"
+        kill $pids 2>/dev/null
+    fi
+    echo "Cleanup complete"
+    exit 1
+}
+
+# Set up trap for cleanup on script interruption
+trap cleanup SIGINT SIGTERM
 
 # Pokémon list
 POKEMON_LIST=("bulbasaur" "ivysaur" "venusaur" "charmander" "charmeleon")
@@ -78,9 +95,53 @@ for pokemon in "${POKEMON_LIST[@]}"; do
     echo "Started process for $pokemon with PID: $!"
 done
 
-echo "All processes started. Waiting for completion..."
+echo "All processes started. Monitoring jobs..."
 
-# Wait for all background processes to finish
+# Display initial job status
+echo "----- Initial Job Status -----"
+jobs -l
+
+# Maximum execution time in seconds before killing processes
+MAX_EXECUTION_TIME=60
+START_TIME=$(date +%s)
+
+# Monitor jobs until all complete or timeout occurs
+while [ $(jobs -p | wc -l) -gt 0 ]; do
+    CURRENT_TIME=$(date +%s)
+    ELAPSED=$((CURRENT_TIME - START_TIME))
+    
+    # Check for timeout
+    if [ $ELAPSED -gt $MAX_EXECUTION_TIME ]; then
+        echo "\n!!! Timeout reached ($MAX_EXECUTION_TIME seconds) !!!"
+        echo "Killing remaining processes..."
+        
+        # Get running job PIDs
+        REMAINING_PIDS=$(jobs -p)
+        if [ -n "$REMAINING_PIDS" ]; then
+            echo "Terminating PIDs: $REMAINING_PIDS"
+            kill $REMAINING_PIDS 2>/dev/null
+            
+            # Give processes a moment to terminate gracefully
+            sleep 2
+            
+            # Force kill if any still running
+            STILL_RUNNING=$(jobs -p)
+            if [ -n "$STILL_RUNNING" ]; then
+                echo "Force killing remaining PIDs: $STILL_RUNNING"
+                kill -9 $STILL_RUNNING 2>/dev/null
+            fi
+        fi
+        
+        echo "Timeout handling complete."
+        break
+    fi
+    
+    echo "----- Jobs still running: $(jobs -p | wc -l) | Elapsed time: ${ELAPSED}s -----"
+    jobs -l
+    sleep 2
+done
+
+# Wait command ensures all child processes are done
 wait
 
 echo "All background processes completed!"
